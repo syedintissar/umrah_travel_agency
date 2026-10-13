@@ -1,0 +1,34 @@
+{
+  "name": "umrah-travel",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Umrah Travel Management & Booking Platform",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "npm run build -w @umrah/shared && npm run build -w @umrah/api && npm run build -w @umrah/web",
+    "build:shared": "npm run build -w @umrah/shared",
+    "dev:api": "npm run start:dev -w @umrah/api",
+    "dev:web": "npm run dev -w @umrah/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "db:generate": "npm run db:generate -w @umrah/api",
+    "db:migrate": "npm run db:migrate -w @umrah/api",
+    "db:deploy": "npm run db:deploy -w @umrah/api",
+    "db:seed": "npm run db:seed -w @umrah/api",
+    "db:seed:demo": "npm run db:seed:demo -w @umrah/api",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css}\"",
+    "dev:db": "node scripts/dev-db.mjs",
+    "setup:local": "npm run build:shared && npm run db:deploy && npm run db:seed && npm run db:seed:demo"
+  },
+  "devDependencies": {
+    "embedded-postgres": "^17.10.0-beta.17",
+    "prettier": "^3.9.9",
+    "typescript": "~6.0.3"
+  }
+}

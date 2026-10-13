@@ -1,0 +1,153 @@
+enum NotificationChannel {
+  EMAIL
+  WHATSAPP
+  SMS
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  CANCELLED
+}
+
+enum ActorType {
+  USER
+  SYSTEM
+  WEBHOOK
+}
+
+model NotificationTemplate {
+  id                   String              @id @default(uuid(7)) @db.Uuid
+  key                  String // e.g. booking.confirmed
+  channel              NotificationChannel
+  locale               String              @default("en")
+  name                 String
+  subject              String?
+  body                 String
+  /// Approved template name on WhatsApp Business Platform (required for WHATSAPP channel)
+  providerTemplateName String?
+  variables            String[]
+  isActive             Boolean             @default(true)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@unique([key, channel, locale])
+}
+
+/// Outbound message log + in-app inbox. Status only advances on provider acknowledgement.
+model Notification {
+  id                String              @id @default(uuid(7)) @db.Uuid
+  channel           NotificationChannel
+  status            NotificationStatus  @default(PENDING)
+  templateKey       String?
+  userId            String?             @db.Uuid
+  customerId        String?             @db.Uuid
+  recipient         String // email, E.164 phone, or user id for IN_APP
+  subject           String?
+  body              String?
+  data              Json?
+  entityType        String?
+  entityId          String?             @db.Uuid
+  provider          String?
+  providerMessageId String?
+  attempts          Int                 @default(0)
+  lastError         String?
+  scheduledFor      DateTime?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  user     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([userId, channel, readAt])
+  @@index([status, scheduledFor])
+  @@index([entityType, entityId])
+  @@index([providerMessageId])
+}
+
+/// Configurable automation (payment reminders, document reminders, pre-departure messages, follow-up nudges).
+/// `offsetMinutes` is relative to the trigger (negative = before a date field such as departureDate).
+model AutomationRule {
+  id            String                @id @default(uuid(7)) @db.Uuid
+  key           String                @unique
+  name          String
+  description   String?
+  triggerEvent  String
+  offsetMinutes Int                   @default(0)
+  conditions    Json?
+  channels      NotificationChannel[]
+  templateKey   String
+  isActive      Boolean               @default(true)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+}
+
+/// Append-only audit trail. Sensitive values must be redacted before being written to before/after.
+model AuditLog {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  actorType   ActorType @default(USER)
+  actorUserId String?   @db.Uuid
+  action      String // e.g. document.download, booking.status_changed
+  entityType  String
+  entityId    String?
+  before      Json?
+  after       Json?
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+  requestId   String?
+  createdAt   DateTime  @default(now())
+
+  // Restrict: rows are immutable (DB trigger), users are soft-deleted.
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@index([createdAt])
+}
+
+/// Key-value settings (company info, currency, deposit defaults, gateway selection). Never secrets.
+model Setting {
+  key         String   @id
+  value       Json
+  group       String   @default("general")
+  isPublic    Boolean  @default(false)
+  description String?
+  updatedById String?  @db.Uuid
+  updatedAt   DateTime @updatedAt
+}
+
+/// Gap-free yearly counters for human-readable references (bookings, invoices, payments, quotations).
+model Sequence {
+  key   String @id // e.g. booking:2026
+  value Int    @default(0)
+}
+
+/// First-party conversion funnel: visitor -> package view -> inquiry -> booking (complements Google Analytics).
+model FunnelEvent {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  name        String // package_viewed, inquiry_submitted, booking_started, booking_confirmed ...
+  anonymousId String
+  userId      String?  @db.Uuid
+  packageId   String?  @db.Uuid
+  entityId    String?  @db.Uuid
+  path        String?
+  referrer    String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  createdAt   DateTime @default(now())
+
+  @@index([name, createdAt])
+  @@index([anonymousId])
+  @@index([packageId, name])
+}

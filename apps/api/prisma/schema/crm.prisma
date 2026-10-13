@@ -1,0 +1,322 @@
+enum LeadSource {
+  WEBSITE
+  CONTACT_FORM
+  CUSTOM_PACKAGE_REQUEST
+  WHATSAPP
+  PHONE
+  EMAIL
+  WALK_IN
+  REFERRAL
+  SOCIAL_MEDIA
+  OTHER
+}
+
+enum LeadStage {
+  NEW
+  CONTACTED
+  QUALIFIED
+  QUOTATION_SENT
+  FOLLOW_UP
+  NEGOTIATION
+  CONVERTED
+  LOST
+}
+
+enum CustomRequestStatus {
+  NEW
+  IN_REVIEW
+  QUOTED
+  CLOSED
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  VIEWED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CONVERTED
+}
+
+enum FollowUpType {
+  CALL
+  WHATSAPP
+  EMAIL
+  MEETING
+  TASK
+}
+
+enum FollowUpStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum CommunicationType {
+  CALL
+  EMAIL
+  WHATSAPP
+  SMS
+  MEETING
+  OTHER
+}
+
+enum CommunicationDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum SupportStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Lead {
+  id                     String     @id @default(uuid(7)) @db.Uuid
+  reference              String     @unique // ENQ-2026-000123, quoted to the customer
+  source                 LeadSource
+  stage                  LeadStage  @default(NEW)
+  priority               Priority   @default(MEDIUM)
+  fullName               String
+  email                  String?
+  phone                  String?
+  whatsappNumber         String?
+  city                   String?
+  country                String?
+  subject                String?
+  message                String?
+  interestedPackageId    String?    @db.Uuid
+  preferredDepartureDate DateTime?  @db.Date
+  travelersCount         Int?
+  budget                 Decimal?   @db.Decimal(12, 2)
+  currency               String     @default("PKR")
+  assignedToId           String?    @db.Uuid
+  customerId             String?    @db.Uuid
+  lostReason             String?
+  nextFollowUpAt         DateTime?
+  lastContactedAt        DateTime?
+  convertedAt            DateTime?
+  consentAt              DateTime?
+  utmSource              String?
+  utmMedium              String?
+  utmCampaign            String?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  deletedAt              DateTime?
+
+  interestedPackage Package?              @relation(fields: [interestedPackageId], references: [id], onDelete: SetNull)
+  assignedTo        User?                 @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  customer          Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customRequest     CustomPackageRequest?
+  quotations        Quotation[]
+  followUps         FollowUp[]
+  notes             CrmNote[]
+  communications    Communication[]
+  bookings          Booking[]
+
+  @@index([stage, assignedToId])
+  @@index([nextFollowUpAt])
+  @@index([email])
+  @@index([phone])
+}
+
+model CustomPackageRequest {
+  id                     String              @id @default(uuid(7)) @db.Uuid
+  leadId                 String              @unique @db.Uuid
+  status                 CustomRequestStatus @default(NEW)
+  adults                 Int                 @default(1)
+  children               Int                 @default(0)
+  infants                Int                 @default(0)
+  departureCity          String?
+  preferredDepartureDate DateTime?           @db.Date
+  flexibleDates          Boolean             @default(true)
+  nightsMakkah           Int?
+  nightsMadinah          Int?
+  hotelStarPreference    Int?
+  roomPreference         RoomOccupancy?
+  needsVisa              Boolean             @default(true)
+  needsFlights           Boolean             @default(false)
+  needsTransport         Boolean             @default(true)
+  needsZiyarat           Boolean             @default(false)
+  budget                 Decimal?            @db.Decimal(12, 2)
+  notes                  String?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  lead                   Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+}
+
+model Quotation {
+  id            String          @id @default(uuid(7)) @db.Uuid
+  number        String          @unique // QUO-2026-000123
+  leadId        String?         @db.Uuid
+  customerId    String?         @db.Uuid
+  packageId     String?         @db.Uuid
+  departureId   String?         @db.Uuid
+  status        QuotationStatus @default(DRAFT)
+  currency      String          @default("PKR")
+  validUntil    DateTime?       @db.Date
+  subtotal      Decimal         @default(0) @db.Decimal(12, 2)
+  discountTotal Decimal         @default(0) @db.Decimal(12, 2)
+  taxTotal      Decimal         @default(0) @db.Decimal(12, 2)
+  total         Decimal         @default(0) @db.Decimal(12, 2)
+  notes         String?
+  terms         String?
+  pdfStorageKey String?
+  createdById   String?         @db.Uuid
+  sentAt        DateTime?
+  viewedAt      DateTime?
+  acceptedAt    DateTime?
+  rejectedAt    DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  lead      Lead?             @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  customer  Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  package   Package?          @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  departure PackageDeparture? @relation(fields: [departureId], references: [id], onDelete: SetNull)
+  createdBy User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  items     QuotationItem[]
+  booking   Booking?
+
+  @@index([leadId])
+  @@index([customerId])
+  @@index([status])
+}
+
+model QuotationItem {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  quotationId String    @db.Uuid
+  description String
+  quantity    Int       @default(1)
+  unitPrice   Decimal   @db.Decimal(12, 2)
+  total       Decimal   @db.Decimal(12, 2)
+  sortOrder   Int       @default(0)
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId])
+}
+
+model FollowUp {
+  id           String         @id @default(uuid(7)) @db.Uuid
+  type         FollowUpType
+  status       FollowUpStatus @default(PENDING)
+  subject      String
+  notes        String?
+  outcome      String?
+  dueAt        DateTime
+  completedAt  DateTime?
+  leadId       String?        @db.Uuid
+  customerId   String?        @db.Uuid
+  bookingId    String?        @db.Uuid
+  assignedToId String         @db.Uuid
+  createdById  String?        @db.Uuid
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  lead       Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  booking    Booking?  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  assignedTo User      @relation("FollowUpAssignee", fields: [assignedToId], references: [id], onDelete: Restrict)
+  createdBy  User?     @relation("FollowUpCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([assignedToId, status, dueAt])
+  @@index([leadId])
+}
+
+model CrmNote {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  body       String
+  authorId   String?  @db.Uuid
+  leadId     String?  @db.Uuid
+  customerId String?  @db.Uuid
+  bookingId  String?  @db.Uuid
+  createdAt  DateTime @default(now())
+
+  author   User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  lead     Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  booking  Booking?  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([customerId])
+  @@index([bookingId])
+}
+
+model Review {
+  id            String       @id @default(uuid(7)) @db.Uuid
+  customerId    String       @db.Uuid
+  bookingId     String?      @db.Uuid
+  packageId     String?      @db.Uuid
+  rating        Int // 1..5, enforced in API + DB check constraint
+  title         String?
+  body          String
+  status        ReviewStatus @default(PENDING)
+  isFeatured    Boolean      @default(false)
+  adminResponse String?
+  moderatedById String?      @db.Uuid
+  moderatedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  booking     Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  package     Package? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  moderatedBy User?    @relation(fields: [moderatedById], references: [id], onDelete: SetNull)
+
+  @@unique([customerId, bookingId])
+  @@index([status, packageId])
+}
+
+/// Communication history: manual log of calls, meetings, emails and chats with a lead/customer.
+/// Automated outbound messages live in `Notification`.
+model Communication {
+  id         String                 @id @default(uuid(7)) @db.Uuid
+  type       CommunicationType
+  direction  CommunicationDirection
+  summary    String
+  occurredAt DateTime               @default(now())
+  authorId   String?                @db.Uuid
+  leadId     String?                @db.Uuid
+  customerId String?                @db.Uuid
+  bookingId  String?                @db.Uuid
+  createdAt  DateTime               @default(now())
+
+  author   User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  lead     Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  booking  Booking?  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, occurredAt])
+  @@index([customerId, occurredAt])
+  @@index([bookingId])
+}
+
+/// Customer-portal support / contact requests (kept separate from the sales pipeline).
+model SupportRequest {
+  id           String        @id @default(uuid(7)) @db.Uuid
+  customerId   String        @db.Uuid
+  bookingId    String?       @db.Uuid
+  subject      String
+  message      String
+  status       SupportStatus @default(OPEN)
+  assignedToId String?       @db.Uuid
+  resolvedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  booking    Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  assignedTo User?    @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([customerId])
+}

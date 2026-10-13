@@ -1,0 +1,334 @@
+enum RoomOccupancy {
+  SINGLE
+  DOUBLE
+  TRIPLE
+  QUAD
+  QUINT
+  SHARING
+}
+
+enum PackageTier {
+  ECONOMY
+  STANDARD
+  PREMIUM
+  VIP
+}
+
+enum MealPlan {
+  ROOM_ONLY
+  BREAKFAST
+  HALF_BOARD
+  FULL_BOARD
+}
+
+enum DepositType {
+  PERCENTAGE
+  FIXED_PER_PERSON
+  FIXED_PER_BOOKING
+}
+
+enum DepartureStatus {
+  SCHEDULED
+  OPEN
+  CLOSED
+  SOLD_OUT
+  CANCELLED
+  COMPLETED
+}
+
+enum TransportType {
+  SEDAN
+  SUV
+  VAN
+  COASTER
+  BUS
+  HARAMAIN_TRAIN
+  FLIGHT
+}
+
+enum TransportServiceKind {
+  AIRPORT_TRANSFER
+  INTERCITY
+  ZIYARAT_TOUR
+  LOCAL
+}
+
+enum PriceBasis {
+  PER_PERSON
+  PER_VEHICLE
+}
+
+model Hotel {
+  id                    String        @id @default(uuid(7)) @db.Uuid
+  slug                  String        @unique
+  name                  String
+  city                  City
+  starRating            Int
+  distanceToHaramMeters Int?
+  walkingMinutes        Int?
+  address               String?
+  latitude              Decimal?      @db.Decimal(9, 6)
+  longitude             Decimal?      @db.Decimal(9, 6)
+  summary               String?
+  description           String?
+  amenities             String[]
+  checkInTime           String?
+  checkOutTime          String?
+  status                PublishStatus @default(DRAFT)
+  seoTitle              String?
+  seoDescription        String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  deletedAt             DateTime?
+
+  images       HotelImage[]
+  roomTypes    HotelRoomType[]
+  packages     PackageHotel[]
+  bookingRooms BookingRoom[]
+
+  @@index([city, status])
+}
+
+model HotelImage {
+  hotelId   String     @db.Uuid
+  mediaId   String     @db.Uuid
+  sortOrder Int        @default(0)
+  hotel     Hotel      @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  media     MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([hotelId, mediaId])
+}
+
+model HotelRoomType {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  hotelId     String          @db.Uuid
+  name        String
+  occupancy   RoomOccupancy
+  maxGuests   Int
+  description String?
+  amenities   String[]
+  sortOrder   Int             @default(0)
+  isActive    Boolean         @default(true)
+  hotel       Hotel           @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  rates       HotelRoomRate[]
+
+  @@index([hotelId])
+}
+
+/// Public nightly rate shown on the Hotels page (package pricing is per departure, see DeparturePrice).
+model HotelRoomRate {
+  id            String        @id @default(uuid(7)) @db.Uuid
+  roomTypeId    String        @db.Uuid
+  validFrom     DateTime      @db.Date
+  validTo       DateTime      @db.Date
+  pricePerNight Decimal       @db.Decimal(12, 2)
+  currency      String        @default("PKR")
+  mealPlan      MealPlan      @default(ROOM_ONLY)
+  roomType      HotelRoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@index([roomTypeId, validFrom, validTo])
+}
+
+model TransportService {
+  id           String               @id @default(uuid(7)) @db.Uuid
+  name         String
+  type         TransportType
+  serviceKind  TransportServiceKind @default(AIRPORT_TRANSFER)
+  isShared     Boolean              @default(false) // false = private
+  vehicleModel String?
+  capacity     Int?
+  fromLocation String?
+  toLocation   String?
+  description  String?
+  priceBasis   PriceBasis           @default(PER_PERSON)
+  basePrice    Decimal?             @db.Decimal(12, 2)
+  currency     String               @default("PKR")
+  isActive     Boolean              @default(true)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  deletedAt    DateTime?
+
+  packages PackageTransport[]
+}
+
+model Ziyarat {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  slug           String        @unique
+  name           String
+  city           City
+  summary        String?
+  description    String?
+  coverMediaId   String?       @db.Uuid
+  status         PublishStatus @default(DRAFT)
+  sortOrder      Int           @default(0)
+  seoTitle       String?
+  seoDescription String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  coverMedia MediaAsset?      @relation("ZiyaratCover", fields: [coverMediaId], references: [id], onDelete: SetNull)
+  packages   PackageZiyarat[]
+
+  @@index([city, status])
+}
+
+model PackageCategory {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  slug        String    @unique
+  name        String
+  description String?
+  sortOrder   Int       @default(0)
+  packages    Package[]
+}
+
+model Package {
+  id                String        @id @default(uuid(7)) @db.Uuid
+  slug              String        @unique
+  title             String
+  subtitle          String?
+  summary           String?
+  description       String?
+  categoryId        String?       @db.Uuid
+  tier              PackageTier   @default(STANDARD)
+  durationDays      Int
+  nightsMakkah      Int           @default(0)
+  nightsMadinah     Int           @default(0)
+  departureCities   String[]
+  mealPlan          MealPlan      @default(ROOM_ONLY)
+  inclusions        String[]
+  exclusions        String[]
+  terms             String?
+  visaIncluded      Boolean       @default(true)
+  flightIncluded    Boolean       @default(false)
+  transportIncluded Boolean       @default(true)
+  ziyaratIncluded   Boolean       @default(false)
+  /// Denormalised lowest active per-person price, refreshed when departures/prices change. Used for search/sort.
+  startingPrice     Decimal?      @db.Decimal(12, 2)
+  currency          String        @default("PKR")
+  depositType       DepositType   @default(PERCENTAGE)
+  depositValue      Decimal       @default(25) @db.Decimal(12, 2)
+  isFeatured        Boolean       @default(false)
+  sortOrder         Int           @default(0)
+  status            PublishStatus @default(DRAFT)
+  coverMediaId      String?       @db.Uuid
+  seoTitle          String?
+  seoDescription    String?
+  publishedAt       DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  deletedAt         DateTime?
+
+  category   PackageCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  coverMedia MediaAsset?           @relation("PackageCover", fields: [coverMediaId], references: [id], onDelete: SetNull)
+  images     PackageImage[]
+  hotels     PackageHotel[]
+  itinerary  PackageItineraryDay[]
+  transport  PackageTransport[]
+  ziyarat    PackageZiyarat[]
+  departures PackageDeparture[]
+  bookings   Booking[]
+  leads      Lead[]
+  quotations Quotation[]
+  reviews    Review[]
+
+  @@index([status, isFeatured])
+  @@index([categoryId])
+  @@index([tier])
+  @@index([startingPrice])
+}
+
+model PackageImage {
+  packageId String     @db.Uuid
+  mediaId   String     @db.Uuid
+  sortOrder Int        @default(0)
+  package   Package    @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  media     MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([packageId, mediaId])
+}
+
+model PackageHotel {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  packageId String  @db.Uuid
+  hotelId   String  @db.Uuid
+  city      City
+  nights    Int
+  sortOrder Int     @default(0)
+  notes     String?
+  package   Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  hotel     Hotel   @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+
+  @@index([packageId])
+  @@index([hotelId])
+}
+
+model PackageItineraryDay {
+  id          String  @id @default(uuid(7)) @db.Uuid
+  packageId   String  @db.Uuid
+  dayNumber   Int
+  title       String
+  description String?
+  city        City?
+  package     Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@unique([packageId, dayNumber])
+}
+
+model PackageTransport {
+  packageId          String           @db.Uuid
+  transportServiceId String           @db.Uuid
+  notes              String?
+  package            Package          @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  transportService   TransportService @relation(fields: [transportServiceId], references: [id], onDelete: Restrict)
+
+  @@id([packageId, transportServiceId])
+}
+
+model PackageZiyarat {
+  packageId String  @db.Uuid
+  ziyaratId String  @db.Uuid
+  package   Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  ziyarat   Ziyarat @relation(fields: [ziyaratId], references: [id], onDelete: Restrict)
+
+  @@id([packageId, ziyaratId])
+}
+
+/// A bookable travel date for a package, with seat inventory.
+model PackageDeparture {
+  id                String          @id @default(uuid(7)) @db.Uuid
+  packageId         String          @db.Uuid
+  departureDate     DateTime        @db.Date
+  returnDate        DateTime        @db.Date
+  departureCity     String?
+  airline           String?
+  flightDetails     String?
+  seatsTotal        Int
+  seatsReserved     Int             @default(0) // incremented transactionally on booking hold/confirm
+  bookingCutoffDate DateTime?       @db.Date
+  status            DepartureStatus @default(SCHEDULED)
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  package    Package          @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  prices     DeparturePrice[]
+  bookings   Booking[]
+  quotations Quotation[]
+
+  @@index([packageId, departureDate])
+  @@index([status, departureDate])
+}
+
+/// Per-person price by room occupancy for a departure.
+model DeparturePrice {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  departureId String           @db.Uuid
+  occupancy   RoomOccupancy
+  adultPrice  Decimal          @db.Decimal(12, 2)
+  childPrice  Decimal?         @db.Decimal(12, 2)
+  infantPrice Decimal?         @db.Decimal(12, 2)
+  currency    String           @default("PKR")
+  departure   PackageDeparture @relation(fields: [departureId], references: [id], onDelete: Cascade)
+
+  @@unique([departureId, occupancy])
+}

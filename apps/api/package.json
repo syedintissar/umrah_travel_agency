@@ -1,0 +1,50 @@
+{
+  "name": "@umrah/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "start:dev": "nest start --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --experimental-vm-modules --no-warnings ../../node_modules/jest/bin/jest.js",
+    "test:e2e": "node --experimental-vm-modules --no-warnings ../../node_modules/jest/bin/jest.js --config test/jest-e2e.config.js --runInBand",
+    "db:generate": "prisma generate",
+    "db:validate": "prisma validate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "postinstall": "prisma generate",
+    "db:seed:demo": "tsx prisma/seed-demo.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "^12.1.2",
+    "@nestjs/core": "^12.1.2",
+    "@nestjs/platform-express": "^12.1.2",
+    "@nestjs/throttler": "^6.7.1",
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "@umrah/shared": "0.1.0",
+    "argon2": "^0.45.1",
+    "dotenv": "^17.2.3",
+    "helmet": "^8.3.0",
+    "pg": "^8.16.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^12.0.8",
+    "@nestjs/testing": "^12.1.2",
+    "@types/express": "^5.0.3",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.10.0",
+    "@types/supertest": "^6.0.3",
+    "jest": "^30.5.2",
+    "prisma": "7.10.0",
+    "supertest": "^7.1.4",
+    "ts-jest": "^29.4.14",
+    "tsx": "^4.20.6",
+    "typescript": "~6.0.3"
+  }
+}

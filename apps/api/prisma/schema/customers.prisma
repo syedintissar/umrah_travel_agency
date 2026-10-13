@@ -1,0 +1,93 @@
+enum TravelerRelationship {
+  SELF
+  SPOUSE
+  CHILD
+  PARENT
+  SIBLING
+  RELATIVE
+  OTHER
+}
+
+/// A customer may exist without a login (created by staff or converted from a lead).
+model Customer {
+  id                String      @id @default(uuid(7)) @db.Uuid
+  userId            String?     @unique @db.Uuid
+  firstName         String
+  lastName          String
+  email             String?
+  phone             String?
+  whatsappNumber    String?
+  whatsappOptInAt   DateTime?
+  marketingOptIn    Boolean     @default(false)
+  country           String? // ISO 3166-1 alpha-2
+  city              String?
+  addressLine       String?
+  preferredLanguage String      @default("en")
+  source            LeadSource?
+  assignedToId      String?     @db.Uuid
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  deletedAt         DateTime?
+
+  user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  assignedTo      User?            @relation("CustomerAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  travelers       Traveler[]
+  bookings        Booking[]
+  payments        Payment[]
+  invoices        Invoice[]
+  documents       Document[]
+  leads           Lead[]
+  quotations      Quotation[]
+  followUps       FollowUp[]
+  notes           CrmNote[]
+  communications  Communication[]
+  supportRequests SupportRequest[]
+  reviews         Review[]
+  notifications   Notification[]
+
+  @@index([email])
+  @@index([phone])
+  @@index([assignedToId])
+}
+
+/// Traveler profile reusable across bookings. Identity numbers are encrypted at the application layer.
+model Traveler {
+  id                     String               @id @default(uuid(7)) @db.Uuid
+  customerId             String               @db.Uuid
+  relationship           TravelerRelationship @default(SELF)
+  title                  String?
+  firstName              String
+  middleName             String?
+  lastName               String
+  fatherOrHusbandName    String?
+  gender                 Gender
+  dateOfBirth            DateTime             @db.Date
+  placeOfBirth           String?
+  nationality            String // ISO 3166-1 alpha-2
+  passportNumberEnc      String?
+  passportNumberHash     String?
+  passportIssuingCountry String?
+  passportIssueDate      DateTime?            @db.Date
+  passportExpiryDate     DateTime?            @db.Date
+  nationalIdEnc          String? // CNIC or other national ID
+  nationalIdHash         String?
+  phone                  String?
+  email                  String?
+  mahramTravelerId       String?              @db.Uuid
+  mahramRelationship     String?
+  specialRequirements    String?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  deletedAt              DateTime?
+
+  customer         Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  mahram           Traveler?         @relation("Mahram", fields: [mahramTravelerId], references: [id], onDelete: SetNull)
+  mahramFor        Traveler[]        @relation("Mahram")
+  bookings         BookingTraveler[]
+  documents        Document[]
+  visaApplications VisaApplication[]
+
+  @@index([customerId])
+  @@index([passportNumberHash])
+  @@index([nationalIdHash])
+}

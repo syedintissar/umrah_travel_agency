@@ -1,0 +1,208 @@
+/// Proposal statuses: pending, processing, successful, failed, refunded, partially refunded (+ offline verification, cancelled).
+/// Only gateway webhooks or finance verification may set SUCCESSFUL.
+enum PaymentStatus {
+  PENDING
+  AWAITING_VERIFICATION // offline payment with uploaded proof, pending finance review
+  PROCESSING
+  SUCCESSFUL
+  FAILED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentMethod {
+  CARD
+  ONLINE_GATEWAY
+  BANK_TRANSFER
+  MOBILE_WALLET
+  CASH
+  CHEQUE
+}
+
+enum PaymentPurpose {
+  DEPOSIT
+  INSTALLMENT
+  BALANCE
+  FULL
+  ADJUSTMENT
+}
+
+enum InstallmentStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  WAIVED
+  CANCELLED
+}
+
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  PROCESSING
+  COMPLETED
+  REJECTED
+  FAILED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
+  REFUNDED
+}
+
+model Payment {
+  id                 String         @id @default(uuid(7)) @db.Uuid
+  reference          String         @unique // PAY-2026-000123 (receipt number)
+  bookingId          String         @db.Uuid
+  customerId         String         @db.Uuid
+  invoiceId          String?        @db.Uuid
+  installmentId      String?        @db.Uuid
+  method             PaymentMethod
+  purpose            PaymentPurpose
+  status             PaymentStatus  @default(PENDING)
+  amount             Decimal        @db.Decimal(12, 2)
+  currency           String         @default("PKR")
+  feeAmount          Decimal?       @db.Decimal(12, 2)
+  provider           String? // gateway adapter key, null for offline
+  providerPaymentId  String?
+  idempotencyKey     String?        @unique
+  proofDocumentId    String?        @unique @db.Uuid
+  receivedAt         DateTime?
+  recordedById       String?        @db.Uuid
+  verifiedById       String?        @db.Uuid
+  verifiedAt         DateTime?
+  reconciledById     String?        @db.Uuid
+  reconciledAt       DateTime?
+  reconciliationNote String?
+  failureCode        String?
+  failureMessage     String?
+  metadata           Json?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  booking       Booking             @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  customer      Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  invoice       Invoice?            @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  installment   PaymentInstallment? @relation(fields: [installmentId], references: [id], onDelete: SetNull)
+  proofDocument Document?           @relation("PaymentProof", fields: [proofDocumentId], references: [id], onDelete: SetNull)
+  recordedBy    User?               @relation("PaymentRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+  verifiedBy    User?               @relation("PaymentVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+  reconciledBy  User?               @relation("PaymentReconciler", fields: [reconciledById], references: [id], onDelete: SetNull)
+  refunds       Refund[]
+
+  @@unique([provider, providerPaymentId])
+  @@index([bookingId, status])
+  @@index([customerId])
+  @@index([status, createdAt])
+}
+
+/// Deposit / installment / balance schedule for a booking.
+model PaymentInstallment {
+  id         String            @id @default(uuid(7)) @db.Uuid
+  bookingId  String            @db.Uuid
+  sequence   Int
+  label      String
+  dueDate    DateTime          @db.Date
+  amount     Decimal           @db.Decimal(12, 2)
+  amountPaid Decimal           @default(0) @db.Decimal(12, 2)
+  status     InstallmentStatus @default(PENDING)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  booking    Booking           @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  payments   Payment[]
+
+  @@unique([bookingId, sequence])
+  @@index([status, dueDate])
+}
+
+model Refund {
+  id               String       @id @default(uuid(7)) @db.Uuid
+  paymentId        String       @db.Uuid
+  bookingId        String       @db.Uuid
+  amount           Decimal      @db.Decimal(12, 2)
+  currency         String       @default("PKR")
+  reason           String
+  status           RefundStatus @default(REQUESTED)
+  providerRefundId String?
+  requestedById    String?      @db.Uuid
+  approvedById     String?      @db.Uuid
+  processedAt      DateTime?
+  failureMessage   String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  payment     Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  booking     Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  requestedBy User?   @relation("RefundRequester", fields: [requestedById], references: [id], onDelete: SetNull)
+  approvedBy  User?   @relation("RefundApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([bookingId])
+  @@index([status])
+}
+
+/// Raw gateway webhook events, stored for idempotent processing and audit.
+model PaymentWebhookEvent {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  provider       String
+  eventId        String
+  eventType      String
+  signatureValid Boolean
+  payload        Json
+  processedAt    DateTime?
+  error          String?
+  receivedAt     DateTime  @default(now())
+
+  @@unique([provider, eventId])
+}
+
+model Invoice {
+  id            String        @id @default(uuid(7)) @db.Uuid
+  number        String        @unique // INV-2026-000123
+  bookingId     String        @db.Uuid
+  customerId    String        @db.Uuid
+  status        InvoiceStatus @default(DRAFT)
+  currency      String        @default("PKR")
+  issueDate     DateTime?     @db.Date
+  dueDate       DateTime?     @db.Date
+  subtotal      Decimal       @db.Decimal(12, 2)
+  discountTotal Decimal       @default(0) @db.Decimal(12, 2)
+  taxTotal      Decimal       @default(0) @db.Decimal(12, 2)
+  total         Decimal       @db.Decimal(12, 2)
+  amountPaid    Decimal       @default(0) @db.Decimal(12, 2)
+  balanceDue    Decimal       @db.Decimal(12, 2)
+  notes         String?
+  pdfStorageKey String?
+  issuedById    String?       @db.Uuid
+  voidedAt      DateTime?
+  voidReason    String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  booking  Booking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  customer Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  issuedBy User?         @relation(fields: [issuedById], references: [id], onDelete: SetNull)
+  lines    InvoiceLine[]
+  payments Payment[]
+
+  @@index([bookingId])
+  @@index([customerId, status])
+}
+
+model InvoiceLine {
+  id          String  @id @default(uuid(7)) @db.Uuid
+  invoiceId   String  @db.Uuid
+  description String
+  quantity    Int     @default(1)
+  unitPrice   Decimal @db.Decimal(12, 2)
+  total       Decimal @db.Decimal(12, 2)
+  sortOrder   Int     @default(0)
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}

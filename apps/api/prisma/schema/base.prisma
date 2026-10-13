@@ -1,0 +1,39 @@
+// Schema is split by domain (one file per bounded context).
+// Conventions: UUIDv7 ids, money as Decimal(12,2), soft delete via deletedAt on core records,
+// passport/CNIC numbers stored AES-256-GCM encrypted (+ HMAC hash for lookup), never plaintext.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum City {
+  MAKKAH
+  MADINAH
+  JEDDAH
+  TAIF
+  OTHER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}

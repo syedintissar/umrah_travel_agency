@@ -1,0 +1,164 @@
+enum UserType {
+  CUSTOMER
+  STAFF
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum TokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  PHONE_VERIFICATION
+  STAFF_INVITATION
+}
+
+model User {
+  id                 String     @id @default(uuid(7)) @db.Uuid
+  email              String     @unique // stored lower-cased
+  phone              String?
+  passwordHash       String?
+  type               UserType
+  status             UserStatus @default(PENDING_VERIFICATION)
+  firstName          String
+  lastName           String
+  jobTitle           String?
+  avatarUrl          String?
+  locale             String     @default("en")
+  emailVerifiedAt    DateTime?
+  phoneVerifiedAt    DateTime?
+  twoFactorEnabled   Boolean    @default(false)
+  twoFactorSecretEnc String? // TOTP secret, encrypted
+  failedLoginCount   Int        @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  lastLoginIp        String?
+  passwordChangedAt  DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  deletedAt          DateTime?
+
+  roles       UserRole[]
+  sessions    Session[]
+  backupCodes TwoFactorBackupCode[]
+  tokens      UserToken[]
+  customer    Customer?
+
+  assignedCustomers    Customer[]             @relation("CustomerAssignee")
+  assignedBookings     Booking[]              @relation("BookingAssignee")
+  createdBookings      Booking[]              @relation("BookingCreator")
+  bookingStatusChanges BookingStatusHistory[]
+  verifiedPayments     Payment[]              @relation("PaymentVerifier")
+  reconciledPayments   Payment[]              @relation("PaymentReconciler")
+  recordedPayments     Payment[]              @relation("PaymentRecorder")
+  requestedRefunds     Refund[]               @relation("RefundRequester")
+  approvedRefunds      Refund[]               @relation("RefundApprover")
+  issuedInvoices       Invoice[]
+  uploadedDocuments    Document[]             @relation("DocumentUploader")
+  reviewedDocuments    Document[]             @relation("DocumentReviewer")
+  assignedVisas        VisaApplication[]
+  visaStatusChanges    VisaStatusHistory[]
+  assignedLeads        Lead[]
+  createdQuotations    Quotation[]
+  assignedFollowUps    FollowUp[]             @relation("FollowUpAssignee")
+  createdFollowUps     FollowUp[]             @relation("FollowUpCreator")
+  crmNotes             CrmNote[]
+  communications       Communication[]
+  assignedSupport      SupportRequest[]
+  moderatedReviews     Review[]
+  posts                Post[]
+  uploadedMedia        MediaAsset[]
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+
+  @@index([type, status])
+}
+
+model Role {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  key         String           @unique // e.g. SUPER_ADMIN (see @umrah/shared ROLE_KEYS)
+  name        String
+  description String?
+  isSystem    Boolean          @default(false) // system roles cannot be deleted
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  permissions RolePermission[]
+  users       UserRole[]
+}
+
+model Permission {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  key         String           @unique // `<module>:<action>`
+  module      String
+  action      String
+  description String?
+  roles       RolePermission[]
+
+  @@index([module])
+}
+
+model RolePermission {
+  roleId       String     @db.Uuid
+  permissionId String     @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId     String   @db.Uuid
+  roleId     String   @db.Uuid
+  assignedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@id([userId, roleId])
+}
+
+/// Refresh-token session with rotation. Reuse of a rotated token revokes the whole family.
+model Session {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  userId           String    @db.Uuid
+  familyId         String    @db.Uuid
+  refreshTokenHash String    @unique
+  userAgent        String?
+  ipAddress        String?
+  expiresAt        DateTime
+  lastUsedAt       DateTime?
+  revokedAt        DateTime?
+  revokedReason    String?
+  createdAt        DateTime  @default(now())
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+model TwoFactorBackupCode {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @db.Uuid
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model UserToken {
+  id        String       @id @default(uuid(7)) @db.Uuid
+  userId    String       @db.Uuid
+  purpose   TokenPurpose
+  tokenHash String       @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+}

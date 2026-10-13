@@ -1,0 +1,127 @@
+enum DocumentType {
+  PASSPORT
+  NATIONAL_ID
+  PHOTO
+  VACCINATION_CERTIFICATE
+  MAHRAM_PROOF
+  MARRIAGE_CERTIFICATE
+  BIRTH_CERTIFICATE
+  PAYMENT_PROOF
+  VISA
+  FLIGHT_TICKET
+  HOTEL_VOUCHER
+  TRAVEL_ITINERARY
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum ScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  FAILED
+}
+
+enum VisaStatus {
+  NOT_STARTED
+  DOCUMENTS_PENDING
+  UNDER_REVIEW
+  READY_TO_SUBMIT
+  SUBMITTED
+  IN_PROCESS
+  APPROVED
+  ISSUED
+  REJECTED
+  CANCELLED
+}
+
+/// Private file in the S3 private bucket. Access only via short-lived signed URLs after authorization; every view/download is audit-logged.
+model Document {
+  id                String         @id @default(uuid(7)) @db.Uuid
+  type              DocumentType
+  status            DocumentStatus @default(PENDING_REVIEW)
+  customerId        String?        @db.Uuid
+  travelerId        String?        @db.Uuid
+  bookingId         String?        @db.Uuid
+  visaApplicationId String?        @db.Uuid
+  storageKey        String         @unique
+  originalFileName  String
+  mimeType          String
+  sizeBytes         Int
+  checksumSha256    String
+  scanStatus        ScanStatus     @default(PENDING)
+  uploadedById      String?        @db.Uuid
+  reviewedById      String?        @db.Uuid
+  reviewedAt        DateTime?
+  rejectionReason   String?
+  expiresAt         DateTime?      @db.Date
+  notes             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  deletedAt         DateTime?
+
+  customer        Customer?        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  traveler        Traveler?        @relation(fields: [travelerId], references: [id], onDelete: Restrict)
+  booking         Booking?         @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  visaApplication VisaApplication? @relation(fields: [visaApplicationId], references: [id], onDelete: SetNull)
+  uploadedBy      User?            @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  reviewedBy      User?            @relation("DocumentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  paymentProofFor Payment?         @relation("PaymentProof")
+
+  @@index([customerId, type])
+  @@index([travelerId, type])
+  @@index([bookingId])
+  @@index([status])
+}
+
+model VisaApplication {
+  id                String     @id @default(uuid(7)) @db.Uuid
+  bookingId         String     @db.Uuid
+  travelerId        String     @db.Uuid
+  status            VisaStatus @default(NOT_STARTED)
+  visaType          String     @default("UMRAH")
+  applicationNumber String?
+  externalReference String? // e.g. Nusuk / MOFA reference
+  visaNumber        String?
+  submittedAt       DateTime?
+  decidedAt         DateTime?
+  issuedAt          DateTime?
+  validFrom         DateTime?  @db.Date
+  validUntil        DateTime?  @db.Date
+  rejectionReason   String?
+  assignedOfficerId String?    @db.Uuid
+  notes             String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  booking         Booking             @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  traveler        Traveler            @relation(fields: [travelerId], references: [id], onDelete: Restrict)
+  assignedOfficer User?               @relation(fields: [assignedOfficerId], references: [id], onDelete: SetNull)
+  documents       Document[]
+  statusHistory   VisaStatusHistory[]
+
+  @@unique([bookingId, travelerId])
+  @@index([status])
+  @@index([assignedOfficerId, status])
+}
+
+model VisaStatusHistory {
+  id                String      @id @default(uuid(7)) @db.Uuid
+  visaApplicationId String      @db.Uuid
+  fromStatus        VisaStatus?
+  toStatus          VisaStatus
+  changedById       String?     @db.Uuid
+  note              String?
+  createdAt         DateTime    @default(now())
+
+  visaApplication VisaApplication @relation(fields: [visaApplicationId], references: [id], onDelete: Cascade)
+  changedBy       User?           @relation(fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([visaApplicationId, createdAt])
+}

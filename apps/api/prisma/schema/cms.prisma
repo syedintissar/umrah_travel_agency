@@ -1,0 +1,132 @@
+enum PageType {
+  STANDARD
+  POLICY
+  LANDING
+}
+
+enum PostType {
+  BLOG
+  GUIDE
+  NEWS
+}
+
+/// Public marketing media (public bucket / CDN). Private customer files use `Document` instead.
+model MediaAsset {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  storageKey   String   @unique
+  url          String
+  mimeType     String
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  altText      String?
+  caption      String?
+  uploadedById String?  @db.Uuid
+  createdAt    DateTime @default(now())
+
+  uploadedBy    User?          @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  hotelImages   HotelImage[]
+  packageImages PackageImage[]
+  packageCovers Package[]      @relation("PackageCover")
+  ziyaratCovers Ziyarat[]      @relation("ZiyaratCover")
+  postCovers    Post[]         @relation("PostCover")
+  pageOgImages  Page[]         @relation("PageOgImage")
+}
+
+/// CMS page (About, Visa Information, policies, landing pages). `content` holds structured blocks.
+model Page {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  slug           String        @unique
+  title          String
+  type           PageType      @default(STANDARD)
+  excerpt        String?
+  content        Json
+  status         PublishStatus @default(DRAFT)
+  seoTitle       String?
+  seoDescription String?
+  ogImageId      String?       @db.Uuid
+  publishedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  ogImage MediaAsset? @relation("PageOgImage", fields: [ogImageId], references: [id], onDelete: SetNull)
+
+  @@index([type, status])
+}
+
+model PostCategory {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  slug        String   @unique
+  name        String
+  type        PostType
+  description String?
+  posts       Post[]
+}
+
+/// Blog posts and Umrah guides. A future `publishedAt` on a PUBLISHED post = scheduled.
+model Post {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  slug           String        @unique
+  type           PostType      @default(BLOG)
+  title          String
+  excerpt        String?
+  content        Json
+  categoryId     String?       @db.Uuid
+  coverMediaId   String?       @db.Uuid
+  authorId       String?       @db.Uuid
+  tags           String[]
+  readingMinutes Int?
+  status         PublishStatus @default(DRAFT)
+  publishedAt    DateTime?
+  seoTitle       String?
+  seoDescription String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  category   PostCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  coverMedia MediaAsset?   @relation("PostCover", fields: [coverMediaId], references: [id], onDelete: SetNull)
+  author     User?         @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([type, status, publishedAt])
+}
+
+model Faq {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  question    String
+  answer      String
+  category    String   @default("general")
+  sortOrder   Int      @default(0)
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category, isPublished, sortOrder])
+}
+
+/// About Us: team members.
+model TeamMember {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  name        String
+  roleTitle   String
+  bio         String?
+  photoUrl    String?
+  sortOrder   Int      @default(0)
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// About Us: certifications / accreditations.
+model Accreditation {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  name        String
+  issuer      String?
+  number      String?
+  logoUrl     String?
+  validUntil  DateTime? @db.Date
+  sortOrder   Int       @default(0)
+  isPublished Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
